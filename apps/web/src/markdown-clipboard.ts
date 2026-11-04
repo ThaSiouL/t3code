@@ -401,9 +401,9 @@ function isSignedAssetUrl(url: string): boolean {
   }
 }
 
-// Signed asset URLs are bearer credentials, so media whose URL is not the one the
-// Markdown authored copies as that Markdown instead.
-function replaceUnauthoredMediaUrls(container: Element): void {
+// Signed asset URLs are bearer credentials. Media whose URL is not the one the Markdown
+// authored copies as that Markdown, and signed links outside it keep only their text.
+function scrubSignedAssetUrls(container: Element): void {
   for (const element of container.querySelectorAll("[src], a[href]")) {
     const src = element.getAttribute("src");
     const url = src ?? element.getAttribute("href") ?? "";
@@ -419,7 +419,7 @@ function replaceUnauthoredMediaUrls(container: Element): void {
 }
 
 function sanitizedHtmlFrom(container: Element): string {
-  replaceUnauthoredMediaUrls(container);
+  scrubSignedAssetUrls(container);
   for (const diagram of container.querySelectorAll("[data-markdown-mermaid]")) {
     const source = diagram.getAttribute("data-markdown-copy");
     if (source !== null) diagram.replaceChildren(mermaidSourceHtml(source));
@@ -452,7 +452,7 @@ export function chatMarkdownClipboardPayload(
     if (range.collapsed) continue;
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
-    replaceUnauthoredMediaUrls(container);
+    scrubSignedAssetUrls(container);
     const ancestor = range.commonAncestorContainer;
     const ancestorElement =
       ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
@@ -464,6 +464,16 @@ export function chatMarkdownClipboardPayload(
       if (!text) continue;
       texts.push(text);
       container.replaceChildren(mermaidSourceHtml(diagramSource));
+      htmls.push(sanitizedHtmlFrom(container));
+      continue;
+    }
+    // A range inside media clones it without the wrapper that holds its authored reference.
+    const media = ancestorElement?.closest("[data-markdown-copy]");
+    if (media?.querySelector("[src]")) {
+      const text = media.getAttribute("data-markdown-copy")?.trim() ?? "";
+      if (!text) continue;
+      texts.push(text);
+      container.replaceChildren(text);
       htmls.push(sanitizedHtmlFrom(container));
       continue;
     }

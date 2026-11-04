@@ -173,7 +173,7 @@ it("copies host media and asset links as authored references, never signed URLs"
   setup();
   const pixel =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-  const signedUrl = `${pixel}#token=secret`;
+  const signedUrl = `${pixel}#SIGNED`;
   await using screen = await render(
     <HostImageUrlContext value={() => signedUrl}>
       <ChatMarkdown
@@ -187,7 +187,7 @@ it("copies host media and asset links as authored references, never signed URLs"
   await expect.element(screen.getByAltText("Logo")).toHaveAttribute("src", externalUrl);
   // Attachment links outside Markdown, such as answered-question files, carry signed hrefs.
   const attachmentLink = document.createElement("a");
-  attachmentLink.href = `${location.origin}/api/assets/claims.token/report.pdf`;
+  attachmentLink.href = `${location.origin}/api/assets/SIGNED.sig/report.pdf`;
   attachmentLink.textContent = "report.pdf";
   screen.container.append(attachmentLink);
 
@@ -197,14 +197,32 @@ it("copies host media and asset links as authored references, never signed URLs"
     .getByAltText("Shot")
     .element()
     .dispatchEvent(new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }));
-  expect(clipboardData.getData("text/plain")).not.toContain("token");
+  expect(clipboardData.getData("text/plain")).not.toContain("SIGNED");
   const html = clipboardData.getData("text/html");
-  expect(html).not.toContain("token");
+  expect(html).not.toContain("SIGNED");
   expect(html).not.toContain('alt="Shot"');
   expect(html).toContain("![Shot](/work/shot.png)");
   expect(html).toContain(`src="${externalUrl}"`);
   expect(html).toContain("report.pdf");
   expect(html).toContain('href="https://example.com/api/assets/manual.pdf"');
+
+  // A range inside a player's wrapper clones the video without its authored reference.
+  const player = document.createElement("span");
+  player.dataset.markdownCopy = "![Clip](/work/clip.mp4)";
+  const video = document.createElement("video");
+  video.src = `${location.origin}/api/assets/SIGNED.sig/clip.mp4`;
+  player.append(video);
+  screen.getByAltText("Shot").element().after(player);
+  const range = document.createRange();
+  range.selectNodeContents(player);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  const videoClipboard = new DataTransfer();
+  video.dispatchEvent(
+    new ClipboardEvent("copy", { clipboardData: videoClipboard, bubbles: true, cancelable: true }),
+  );
+  expect(videoClipboard.getData("text/plain")).toBe("![Clip](/work/clip.mp4)");
+  expect(videoClipboard.getData("text/html")).not.toContain("SIGNED");
 });
 
 it("loads the <picture> source for the current theme through the image route", async () => {
