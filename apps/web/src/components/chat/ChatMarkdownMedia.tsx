@@ -263,6 +263,7 @@ export function ChatMarkdownImage(props: {
             ref={markLoadedIfComplete}
             src={src}
             alt={props.alt}
+            crossOrigin={props.imageProps?.crossOrigin}
             decoding="async"
             loading="lazy"
             draggable={false}
@@ -439,7 +440,12 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
         props.className,
       )}
       style={style}
-      imageProps={props.imageProps}
+      imageProps={
+        // Asset routes send CORS headers; a CORS load lets copy read the pixels on another origin.
+        assetUrl._tag === "Success"
+          ? { ...props.imageProps, crossOrigin: "anonymous" }
+          : props.imageProps
+      }
       actionsSource={actionsSource}
       originalUrl={props.originalUrl}
       onImageExpand={props.onImageExpand}

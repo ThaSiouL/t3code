@@ -189,11 +189,9 @@ it("copies host images as pixels and other media as authored references, never s
   attachmentLink.textContent = "report.pdf";
   screen.container.append(attachmentLink);
   // An image that has not loaded has no pixels to copy.
-  const unloaded = document.createElement("span");
+  const unloaded = document.createElement("img");
   unloaded.dataset.markdownCopy = "![Pending](/work/pending.png)";
-  const unloadedImage = document.createElement("img");
-  unloadedImage.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
-  unloaded.append(unloadedImage);
+  unloaded.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
   screen.container.append(unloaded);
   const shot = screen.getByAltText("Shot").element() as HTMLImageElement;
   await vi.waitFor(() => expect(shot.naturalWidth).toBe(32));
@@ -204,7 +202,10 @@ it("copies host images as pixels and other media as authored references, never s
     .getByAltText("Shot")
     .element()
     .dispatchEvent(new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }));
-  expect(clipboardData.getData("text/plain")).not.toContain("SIGNED");
+  const text = clipboardData.getData("text/plain");
+  expect(text).not.toContain("SIGNED");
+  expect(text).not.toContain("data:");
+  expect(text).toContain("![Shot](/work/shot.png)");
   const html = clipboardData.getData("text/html");
   expect(html).not.toContain("SIGNED");
   const copied = new DOMParser().parseFromString(html, "text/html");

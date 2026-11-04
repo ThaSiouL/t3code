@@ -401,15 +401,21 @@ function isSignedAssetUrl(url: string): boolean {
   }
 }
 
-// Above this a pasted data URL runs to many megabytes.
-const MAX_EMBEDDED_IMAGE_PIXELS = 4_000_000;
+// Pixels one copy may embed. The copy handler encodes synchronously, and a 4 MP PNG is
+// already several megabytes of HTML.
+const EMBEDDED_IMAGE_PIXEL_BUDGET = 4_000_000;
+
+interface PixelBudget {
+  pixels: number;
+}
 
 // The pixels of an image already shown on the page, so rich text keeps the picture, not its URL.
-function embeddedImageSrc(src: string): string | null {
+function embeddedImageSrc(src: string, budget: PixelBudget): string | null {
   const image = Array.from(document.images).find(
     (candidate) => candidate.getAttribute("src") === src && candidate.naturalWidth > 0,
   );
-  if (!image || image.naturalWidth * image.naturalHeight > MAX_EMBEDDED_IMAGE_PIXELS) return null;
+  const pixels = image ? image.naturalWidth * image.naturalHeight : Infinity;
+  if (!image || pixels > budget.pixels) return null;
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
@@ -417,7 +423,9 @@ function embeddedImageSrc(src: string): string | null {
   if (!context) return null;
   try {
     context.drawImage(image, 0, 0);
-    return canvas.toDataURL("image/png");
+    const dataUrl = canvas.toDataURL("image/png");
+    budget.pixels -= pixels;
+    return dataUrl;
   } catch {
     // A cross-origin image, such as a remote environment's, taints the canvas.
     return null;
@@ -427,7 +435,10 @@ function embeddedImageSrc(src: string): string | null {
 // Signed asset URLs are bearer credentials. Images shown on the page copy as their pixels.
 // Other media whose URL is not the one the Markdown authored copies as that Markdown, and
 // signed links outside it keep only their text.
-function scrubSignedAssetUrls(container: Element): void {
+function scrubSignedAssetUrls(
+  container: Element,
+  budget: PixelBudget = { pixels: EMBEDDED_IMAGE_PIXEL_BUDGET },
+): void {
   for (const element of container.querySelectorAll("[src], a[href]")) {
     const src = element.getAttribute("src");
     const url = src ?? element.getAttribute("href") ?? "";
@@ -436,7 +447,11 @@ function scrubSignedAssetUrls(container: Element): void {
     const markdown = wrapper?.getAttribute("data-markdown-copy");
     // The renderer resolves an authored `//host/path` to the page's scheme.
     if (url && markdown?.includes(url.replace(/^https?:/i, ""))) continue;
-    const embedded = element.localName === "img" && src ? embeddedImageSrc(src) : null;
+    // Only a Markdown image carries its own reference; chips and players copy as a unit.
+    const embedded =
+      element.localName === "img" && wrapper === element && src
+        ? embeddedImageSrc(src, budget)
+        : null;
     if (embedded) {
       element.setAttribute("src", embedded);
       element.removeAttribute("srcset");
@@ -477,12 +492,13 @@ export function chatMarkdownClipboardPayload(
 ): MarkdownClipboardPayload | null {
   const texts: string[] = [];
   const htmls: string[] = [];
+  const budget = { pixels: EMBEDDED_IMAGE_PIXEL_BUDGET };
   for (let index = 0; index < selection.rangeCount; index += 1) {
     const range = selection.getRangeAt(index);
     if (range.collapsed) continue;
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
-    scrubSignedAssetUrls(container);
+    scrubSignedAssetUrls(container, budget);
     const ancestor = range.commonAncestorContainer;
     const ancestorElement =
       ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
