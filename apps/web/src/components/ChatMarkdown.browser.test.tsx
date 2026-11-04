@@ -193,16 +193,6 @@ it("copies host images as pixels and other media as authored references, never s
   unloaded.dataset.markdownCopy = "![Pending](/work/pending.png)";
   unloaded.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
   screen.container.append(unloaded);
-  // A HiDPI screenshot is over the pixel budget on its own.
-  const canvas = Object.assign(document.createElement("canvas"), { width: 2100, height: 2100 });
-  const big = document.createElement("img");
-  big.alt = "Big";
-  big.dataset.markdownCopy = "![Big](/work/big.png)";
-  big.src = URL.createObjectURL(
-    await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!))),
-  );
-  screen.container.append(big);
-  await big.decode();
   // On another origin the lightbox's copy of an image loads without CORS and can't be read.
   const otherHost = location.hostname === "localhost" ? "[::1]" : "localhost";
   const crossUrl = `${location.protocol}//${otherHost}:${location.port}/favicon-32x32.png`;
@@ -213,8 +203,21 @@ it("copies host images as pixels and other media as authored references, never s
     src: crossUrl,
   });
   cross.dataset.markdownCopy = "![Cross](/work/cross.png)";
-  screen.container.append(lightboxCopy, cross);
-  await Promise.all([lightboxCopy.decode(), cross.decode()]);
+  const photo = Object.assign(document.createElement("img"), {
+    alt: "Photo",
+    src: (await import("../../test/fixtures/pixel.jpg?url")).default,
+  });
+  photo.dataset.markdownCopy = "![Photo](/work/photo.jpg)";
+  // A HiDPI screenshot is over the pixel budget on its own, so it comes last.
+  const canvas = Object.assign(document.createElement("canvas"), { width: 2100, height: 2100 });
+  const big = document.createElement("img");
+  big.alt = "Big";
+  big.dataset.markdownCopy = "![Big](/work/big.png)";
+  big.src = URL.createObjectURL(
+    await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!))),
+  );
+  screen.container.append(lightboxCopy, cross, photo, big);
+  await Promise.all([lightboxCopy, cross, photo, big].map((image) => image.decode()));
   const shot = screen.getByAltText("Shot").element() as HTMLImageElement;
   await vi.waitFor(() => expect(shot.naturalWidth).toBe(32));
 
@@ -236,6 +239,9 @@ it("copies host images as pixels and other media as authored references, never s
   );
   expect(copied.querySelector('img[alt="Cross"]')?.getAttribute("src")).toMatch(
     /^data:image\/png;base64,/,
+  );
+  expect(copied.querySelector('img[alt="Photo"]')?.getAttribute("src")).toMatch(
+    /^data:image\/jpeg;base64,/,
   );
   const bigCopy = new Image();
   bigCopy.src = copied.querySelector('img[alt="Big"]')?.getAttribute("src") ?? "";
