@@ -172,6 +172,7 @@ export function ChatMarkdownImage(props: {
 }) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [corsFailedSrc, setCorsFailedSrc] = useState<string | null>(null);
   const src = props.src ?? loadedSrc;
   const failed = props.sourceFailed === true || (src !== null && failedSrc === src);
   const settled = src !== null && !failed && (!props.standalone || loadedSrc !== null);
@@ -186,12 +187,19 @@ export function ChatMarkdownImage(props: {
       ...(props.originalUrl ? { originalUrl: props.originalUrl } : {}),
     });
   };
+  // A host or proxy without CORS headers fails a CORS load; show the image anyway, without it.
+  const crossOrigin =
+    src !== null && corsFailedSrc === src ? undefined : props.imageProps?.crossOrigin;
   const imageEvents = (loadingSrc: string) => ({
     onLoad: () => {
       setLoadedSrc(loadingSrc);
       setFailedSrc(null);
     },
     onError: () => {
+      if (crossOrigin !== undefined) {
+        setCorsFailedSrc(loadingSrc);
+        return;
+      }
       setFailedSrc(loadingSrc);
       setLoadedSrc(null);
     },
@@ -202,6 +210,7 @@ export function ChatMarkdownImage(props: {
       <MediaActions source={props.actionsSource}>
         <img
           {...props.imageProps}
+          crossOrigin={crossOrigin}
           ref={markLoadedIfComplete}
           src={src}
           alt={props.alt}
@@ -263,7 +272,7 @@ export function ChatMarkdownImage(props: {
             ref={markLoadedIfComplete}
             src={src}
             alt={props.alt}
-            crossOrigin={props.imageProps?.crossOrigin}
+            crossOrigin={crossOrigin}
             decoding="async"
             loading="lazy"
             draggable={false}

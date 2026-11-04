@@ -83,4 +83,22 @@ describe("ChatMarkdownAssetImage", () => {
     await expect.element(screen.getByRole("img", { name: "diagram" })).toBeInTheDocument();
     expect(assetQuery.mints).toBe(2);
   });
+
+  it("shows an asset image without CORS when its CORS load fails", async () => {
+    await using screen = await render(
+      <ChatMarkdownAssetImage
+        environmentId={EnvironmentId.make("environment-1")}
+        resource={{ _tag: "media-file", threadId: ThreadId.make("thread-1"), path: "/w/a.png" }}
+        alt="shot"
+      />,
+    );
+    const image = screen.getByRole("img", { name: "shot" });
+    await expect.element(image).toHaveAttribute("crossorigin", "anonymous");
+
+    // A host without CORS headers fails the load before any pixels arrive.
+    image.element().dispatchEvent(new Event("error"));
+
+    await expect.element(image).not.toHaveAttribute("crossorigin");
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+  });
 });
