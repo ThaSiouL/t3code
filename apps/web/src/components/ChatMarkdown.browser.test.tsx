@@ -178,7 +178,7 @@ it("copies host media and asset links as authored references, never signed URLs"
     <HostImageUrlContext value={() => signedUrl}>
       <ChatMarkdown
         cwd={undefined}
-        text={`![Shot](/work/shot.png) and ![Logo](//${location.host}/favicon-16x16.png)`}
+        text={`![Shot](/work/shot.png) and ![Logo](//${location.host}/favicon-16x16.png), see [Manual](https://example.com/api/assets/manual.pdf)`}
       />
     </HostImageUrlContext>,
   );
@@ -187,7 +187,7 @@ it("copies host media and asset links as authored references, never signed URLs"
   await expect.element(screen.getByAltText("Logo")).toHaveAttribute("src", externalUrl);
   // Attachment links outside Markdown, such as answered-question files, carry signed hrefs.
   const attachmentLink = document.createElement("a");
-  attachmentLink.href = "/api/assets/token-secret/report.pdf";
+  attachmentLink.href = `${location.origin}/api/assets/claims.token/report.pdf`;
   attachmentLink.textContent = "report.pdf";
   screen.container.append(attachmentLink);
 
@@ -197,12 +197,14 @@ it("copies host media and asset links as authored references, never signed URLs"
     .getByAltText("Shot")
     .element()
     .dispatchEvent(new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }));
+  expect(clipboardData.getData("text/plain")).not.toContain("token");
   const html = clipboardData.getData("text/html");
   expect(html).not.toContain("token");
   expect(html).not.toContain('alt="Shot"');
   expect(html).toContain("![Shot](/work/shot.png)");
   expect(html).toContain(`src="${externalUrl}"`);
   expect(html).toContain("report.pdf");
+  expect(html).toContain('href="https://example.com/api/assets/manual.pdf"');
 });
 
 it("loads the <picture> source for the current theme through the image route", async () => {

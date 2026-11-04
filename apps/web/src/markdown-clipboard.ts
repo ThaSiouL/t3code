@@ -392,9 +392,10 @@ function mathSourceElement(wrapper: Element): Element {
   return pre;
 }
 
+// The server's signed route: `/api/assets/<payload>.<signature>/<file name>`.
 function isSignedAssetUrl(url: string): boolean {
   try {
-    return new URL(url, document.baseURI).pathname.includes("/api/assets/");
+    return /^\/api\/assets\/[\w-]+\.[\w-]+\/[^/]+$/.test(new URL(url, document.baseURI).pathname);
   } catch {
     return false;
   }
@@ -406,9 +407,7 @@ function replaceUnauthoredMediaUrls(container: Element): void {
   for (const element of container.querySelectorAll("[src], a[href]")) {
     const src = element.getAttribute("src");
     const url = src ?? element.getAttribute("href") ?? "";
-    if (src === null && !element.matches('[data-slot="button"]') && !isSignedAssetUrl(url)) {
-      continue;
-    }
+    if (src === null && !isSignedAssetUrl(url)) continue;
     const wrapper = element.closest("[data-markdown-copy]");
     const markdown = wrapper?.getAttribute("data-markdown-copy");
     // The renderer resolves an authored `//host/path` to the page's scheme.
@@ -453,6 +452,7 @@ export function chatMarkdownClipboardPayload(
     if (range.collapsed) continue;
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
+    replaceUnauthoredMediaUrls(container);
     const ancestor = range.commonAncestorContainer;
     const ancestorElement =
       ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
