@@ -401,8 +401,8 @@ function isSignedAssetUrl(url: string): boolean {
   }
 }
 
-// Pixels one copy may embed. The copy handler encodes synchronously, and a 4 MP PNG is
-// already several megabytes of HTML.
+// Pixels one copy may embed. The copy handler encodes synchronously, and 4 MP is already
+// over a megabyte of HTML.
 const EMBEDDED_IMAGE_PIXEL_BUDGET = 4_000_000;
 
 interface PixelBudget {
@@ -427,11 +427,14 @@ function embeddedImageSrc(src: string, budget: PixelBudget): string | null {
   if (!context) return null;
   try {
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/png");
+    // A photo re-encoded as PNG is several times its JPEG: 10 MB against 1.3 MB at 4 MP.
+    const dataUrl = /\.jpe?g$/i.test(new URL(src, document.baseURI).pathname)
+      ? canvas.toDataURL("image/jpeg", 0.9)
+      : canvas.toDataURL("image/png");
     budget.pixels -= canvas.width * canvas.height;
     return dataUrl;
   } catch {
-    // A cross-origin image, such as a remote environment's, taints the canvas.
+    // An image loaded without CORS from another origin taints the canvas.
     return null;
   }
 }

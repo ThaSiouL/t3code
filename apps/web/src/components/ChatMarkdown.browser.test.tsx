@@ -203,6 +203,18 @@ it("copies host images as pixels and other media as authored references, never s
   );
   screen.container.append(big);
   await big.decode();
+  // On another origin the lightbox's copy of an image loads without CORS and can't be read.
+  const otherHost = location.hostname === "localhost" ? "[::1]" : "localhost";
+  const crossUrl = `${location.protocol}//${otherHost}:${location.port}/favicon-32x32.png`;
+  const lightboxCopy = Object.assign(document.createElement("img"), { src: crossUrl });
+  const cross = Object.assign(document.createElement("img"), {
+    alt: "Cross",
+    crossOrigin: "anonymous",
+    src: crossUrl,
+  });
+  cross.dataset.markdownCopy = "![Cross](/work/cross.png)";
+  screen.container.append(lightboxCopy, cross);
+  await Promise.all([lightboxCopy.decode(), cross.decode()]);
   const shot = screen.getByAltText("Shot").element() as HTMLImageElement;
   await vi.waitFor(() => expect(shot.naturalWidth).toBe(32));
 
@@ -220,6 +232,9 @@ it("copies host images as pixels and other media as authored references, never s
   expect(html).not.toContain("SIGNED");
   const copied = new DOMParser().parseFromString(html, "text/html");
   expect(copied.querySelector('img[alt="Shot"]')?.getAttribute("src")).toMatch(
+    /^data:image\/png;base64,/,
+  );
+  expect(copied.querySelector('img[alt="Cross"]')?.getAttribute("src")).toMatch(
     /^data:image\/png;base64,/,
   );
   const bigCopy = new Image();
