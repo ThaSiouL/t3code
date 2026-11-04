@@ -194,8 +194,8 @@ it("copies host images as pixels and other media as authored references, never s
   unloaded.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
   screen.container.append(unloaded);
   // On another origin the lightbox's copy of an image loads without CORS and can't be read.
-  const otherHost = location.hostname === "localhost" ? "[::1]" : "localhost";
-  const crossUrl = `${location.protocol}//${otherHost}:${location.port}/favicon-32x32.png`;
+  // Chromium resolves `*.localhost` to loopback whatever the hosts file says.
+  const crossUrl = `${location.protocol}//copy.localhost:${location.port}/favicon-32x32.png`;
   const lightboxCopy = Object.assign(document.createElement("img"), { src: crossUrl });
   const cross = Object.assign(document.createElement("img"), {
     alt: "Cross",
