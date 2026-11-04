@@ -169,19 +169,27 @@ it("loads a host image through the page's own route when there is no environment
   );
 });
 
-it("copies a host image as its authored path, never its signed URL", async () => {
+it("copies host media and asset links as authored references, never signed URLs", async () => {
   setup();
   const pixel =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   const signedUrl = `${pixel}#token=secret`;
-  const authoredUrl = `${location.origin}/favicon-16x16.png`;
   await using screen = await render(
     <HostImageUrlContext value={() => signedUrl}>
-      <ChatMarkdown cwd={undefined} text={`![Shot](/work/shot.png) and ![Logo](${authoredUrl})`} />
+      <ChatMarkdown
+        cwd={undefined}
+        text={`![Shot](/work/shot.png) and ![Logo](//${location.host}/favicon-16x16.png)`}
+      />
     </HostImageUrlContext>,
   );
+  const externalUrl = `${location.origin}/favicon-16x16.png`;
   await expect.element(screen.getByAltText("Shot")).toHaveAttribute("src", signedUrl);
-  await expect.element(screen.getByAltText("Logo")).toHaveAttribute("src", authoredUrl);
+  await expect.element(screen.getByAltText("Logo")).toHaveAttribute("src", externalUrl);
+  // Attachment links outside Markdown, such as answered-question files, carry signed hrefs.
+  const attachmentLink = document.createElement("a");
+  attachmentLink.href = "/api/assets/token-secret/report.pdf";
+  attachmentLink.textContent = "report.pdf";
+  screen.container.append(attachmentLink);
 
   window.getSelection()?.selectAllChildren(screen.container);
   const clipboardData = new DataTransfer();
@@ -190,9 +198,11 @@ it("copies a host image as its authored path, never its signed URL", async () =>
     .element()
     .dispatchEvent(new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }));
   const html = clipboardData.getData("text/html");
-  expect(html).not.toContain("token=secret");
+  expect(html).not.toContain("token");
+  expect(html).not.toContain('alt="Shot"');
   expect(html).toContain("![Shot](/work/shot.png)");
-  expect(html).toContain(`src="${authoredUrl}"`);
+  expect(html).toContain(`src="${externalUrl}"`);
+  expect(html).toContain("report.pdf");
 });
 
 it("loads the <picture> source for the current theme through the image route", async () => {

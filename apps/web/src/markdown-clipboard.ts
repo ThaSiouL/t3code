@@ -392,16 +392,30 @@ function mathSourceElement(wrapper: Element): Element {
   return pre;
 }
 
+function isSignedAssetUrl(url: string): boolean {
+  try {
+    return new URL(url, document.baseURI).pathname.includes("/api/assets/");
+  } catch {
+    return false;
+  }
+}
+
 // Signed asset URLs are bearer credentials, so media whose URL is not the one the
 // Markdown authored copies as that Markdown instead.
 function replaceUnauthoredMediaUrls(container: Element): void {
-  for (const element of container.querySelectorAll('[src], a[data-slot="button"]')) {
-    const url = element.getAttribute("src") ?? element.getAttribute("href") ?? "";
+  for (const element of container.querySelectorAll("[src], a[href]")) {
+    const src = element.getAttribute("src");
+    const url = src ?? element.getAttribute("href") ?? "";
+    if (src === null && !element.matches('[data-slot="button"]') && !isSignedAssetUrl(url)) {
+      continue;
+    }
     const wrapper = element.closest("[data-markdown-copy]");
     const markdown = wrapper?.getAttribute("data-markdown-copy");
-    if (url && markdown?.includes(url)) continue;
+    // The renderer resolves an authored `//host/path` to the page's scheme.
+    if (url && markdown?.includes(url.replace(/^https?:/i, ""))) continue;
     if (wrapper && markdown) wrapper.replaceWith(markdown);
-    else element.remove();
+    else if (src !== null) element.remove();
+    else element.replaceWith(...element.childNodes);
   }
 }
 
