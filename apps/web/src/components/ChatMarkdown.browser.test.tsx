@@ -193,6 +193,16 @@ it("copies host images as pixels and other media as authored references, never s
   unloaded.dataset.markdownCopy = "![Pending](/work/pending.png)";
   unloaded.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
   screen.container.append(unloaded);
+  // A HiDPI screenshot is over the pixel budget on its own.
+  const canvas = Object.assign(document.createElement("canvas"), { width: 2100, height: 2100 });
+  const big = document.createElement("img");
+  big.alt = "Big";
+  big.dataset.markdownCopy = "![Big](/work/big.png)";
+  big.src = URL.createObjectURL(
+    await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!))),
+  );
+  screen.container.append(big);
+  await big.decode();
   const shot = screen.getByAltText("Shot").element() as HTMLImageElement;
   await vi.waitFor(() => expect(shot.naturalWidth).toBe(32));
 
@@ -212,6 +222,11 @@ it("copies host images as pixels and other media as authored references, never s
   expect(copied.querySelector('img[alt="Shot"]')?.getAttribute("src")).toMatch(
     /^data:image\/png;base64,/,
   );
+  const bigCopy = new Image();
+  bigCopy.src = copied.querySelector('img[alt="Big"]')?.getAttribute("src") ?? "";
+  await bigCopy.decode();
+  expect(bigCopy.naturalWidth).toBeGreaterThan(1900);
+  expect(bigCopy.naturalWidth * bigCopy.naturalHeight).toBeLessThanOrEqual(4_000_000);
   expect(html).toContain("![Pending](/work/pending.png)");
   expect(html).toContain(`src="${externalUrl}"`);
   expect(html).toContain("report.pdf");

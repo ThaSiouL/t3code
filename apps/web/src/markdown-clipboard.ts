@@ -416,17 +416,19 @@ function embeddedImageSrc(src: string, budget: PixelBudget): string | null {
   );
   // On another origin only a CORS load is readable, not e.g. the lightbox's copy of the same URL.
   const image = loaded.find((candidate) => candidate.crossOrigin !== null) ?? loaded[0];
-  const pixels = image ? image.naturalWidth * image.naturalHeight : Infinity;
-  if (!image || pixels > budget.pixels) return null;
+  if (!image) return null;
+  // A HiDPI screenshot is over budget on its own, so scale it down rather than drop it.
+  const scale = Math.min(1, Math.sqrt(budget.pixels / (image.naturalWidth * image.naturalHeight)));
+  if (scale < 0.25) return null;
   const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
+  canvas.width = Math.floor(image.naturalWidth * scale);
+  canvas.height = Math.floor(image.naturalHeight * scale);
   const context = canvas.getContext("2d");
   if (!context) return null;
   try {
-    context.drawImage(image, 0, 0);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/png");
-    budget.pixels -= pixels;
+    budget.pixels -= canvas.width * canvas.height;
     return dataUrl;
   } catch {
     // A cross-origin image, such as a remote environment's, taints the canvas.
