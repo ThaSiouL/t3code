@@ -169,11 +169,9 @@ it("loads a host image through the page's own route when there is no environment
   );
 });
 
-it("copies host media and asset links as authored references, never signed URLs", async () => {
+it("copies host images as pixels and other media as authored references, never signed URLs", async () => {
   setup();
-  const pixel =
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-  const signedUrl = `${pixel}#SIGNED`;
+  const signedUrl = `${location.origin}/favicon-32x32.png?SIGNED`;
   await using screen = await render(
     <HostImageUrlContext value={() => signedUrl}>
       <ChatMarkdown
@@ -190,6 +188,15 @@ it("copies host media and asset links as authored references, never signed URLs"
   attachmentLink.href = `${location.origin}/api/assets/SIGNED.sig/report.pdf`;
   attachmentLink.textContent = "report.pdf";
   screen.container.append(attachmentLink);
+  // An image that has not loaded has no pixels to copy.
+  const unloaded = document.createElement("span");
+  unloaded.dataset.markdownCopy = "![Pending](/work/pending.png)";
+  const unloadedImage = document.createElement("img");
+  unloadedImage.src = `${location.origin}/api/assets/SIGNED.sig/pending.png`;
+  unloaded.append(unloadedImage);
+  screen.container.append(unloaded);
+  const shot = screen.getByAltText("Shot").element() as HTMLImageElement;
+  await vi.waitFor(() => expect(shot.naturalWidth).toBe(32));
 
   window.getSelection()?.selectAllChildren(screen.container);
   const clipboardData = new DataTransfer();
@@ -200,8 +207,11 @@ it("copies host media and asset links as authored references, never signed URLs"
   expect(clipboardData.getData("text/plain")).not.toContain("SIGNED");
   const html = clipboardData.getData("text/html");
   expect(html).not.toContain("SIGNED");
-  expect(html).not.toContain('alt="Shot"');
-  expect(html).toContain("![Shot](/work/shot.png)");
+  const copied = new DOMParser().parseFromString(html, "text/html");
+  expect(copied.querySelector('img[alt="Shot"]')?.getAttribute("src")).toMatch(
+    /^data:image\/png;base64,/,
+  );
+  expect(html).toContain("![Pending](/work/pending.png)");
   expect(html).toContain(`src="${externalUrl}"`);
   expect(html).toContain("report.pdf");
   expect(html).toContain('href="https://example.com/api/assets/manual.pdf"');

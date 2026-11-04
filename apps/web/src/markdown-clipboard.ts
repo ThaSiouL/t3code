@@ -401,17 +401,47 @@ function isSignedAssetUrl(url: string): boolean {
   }
 }
 
-// Signed asset URLs are bearer credentials. Media whose URL is not the one the Markdown
-// authored copies as that Markdown, and signed links outside it keep only their text.
+// Above this a pasted data URL runs to many megabytes.
+const MAX_EMBEDDED_IMAGE_PIXELS = 4_000_000;
+
+// The pixels of an image already shown on the page, so rich text keeps the picture, not its URL.
+function embeddedImageSrc(src: string): string | null {
+  const image = Array.from(document.images).find(
+    (candidate) => candidate.getAttribute("src") === src && candidate.naturalWidth > 0,
+  );
+  if (!image || image.naturalWidth * image.naturalHeight > MAX_EMBEDDED_IMAGE_PIXELS) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  try {
+    context.drawImage(image, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch {
+    // A cross-origin image, such as a remote environment's, taints the canvas.
+    return null;
+  }
+}
+
+// Signed asset URLs are bearer credentials. Images shown on the page copy as their pixels.
+// Other media whose URL is not the one the Markdown authored copies as that Markdown, and
+// signed links outside it keep only their text.
 function scrubSignedAssetUrls(container: Element): void {
   for (const element of container.querySelectorAll("[src], a[href]")) {
     const src = element.getAttribute("src");
     const url = src ?? element.getAttribute("href") ?? "";
-    if (src === null && !isSignedAssetUrl(url)) continue;
+    if (src === null ? !isSignedAssetUrl(url) : src.startsWith("data:")) continue;
     const wrapper = element.closest("[data-markdown-copy]");
     const markdown = wrapper?.getAttribute("data-markdown-copy");
     // The renderer resolves an authored `//host/path` to the page's scheme.
     if (url && markdown?.includes(url.replace(/^https?:/i, ""))) continue;
+    const embedded = element.localName === "img" && src ? embeddedImageSrc(src) : null;
+    if (embedded) {
+      element.setAttribute("src", embedded);
+      element.removeAttribute("srcset");
+      continue;
+    }
     if (wrapper && markdown) wrapper.replaceWith(markdown);
     else if (src !== null) element.remove();
     else element.replaceWith(...element.childNodes);
