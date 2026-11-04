@@ -169,6 +169,32 @@ it("loads a host image through the page's own route when there is no environment
   );
 });
 
+it("copies a host image as its authored path, never its signed URL", async () => {
+  setup();
+  const pixel =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  const signedUrl = `${pixel}#token=secret`;
+  const authoredUrl = `${location.origin}/favicon-16x16.png`;
+  await using screen = await render(
+    <HostImageUrlContext value={() => signedUrl}>
+      <ChatMarkdown cwd={undefined} text={`![Shot](/work/shot.png) and ![Logo](${authoredUrl})`} />
+    </HostImageUrlContext>,
+  );
+  await expect.element(screen.getByAltText("Shot")).toHaveAttribute("src", signedUrl);
+  await expect.element(screen.getByAltText("Logo")).toHaveAttribute("src", authoredUrl);
+
+  window.getSelection()?.selectAllChildren(screen.container);
+  const clipboardData = new DataTransfer();
+  screen
+    .getByAltText("Shot")
+    .element()
+    .dispatchEvent(new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }));
+  const html = clipboardData.getData("text/html");
+  expect(html).not.toContain("token=secret");
+  expect(html).toContain("![Shot](/work/shot.png)");
+  expect(html).toContain(`src="${authoredUrl}"`);
+});
+
 it("loads the <picture> source for the current theme through the image route", async () => {
   setup();
   const pixel =
