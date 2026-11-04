@@ -411,9 +411,11 @@ interface PixelBudget {
 
 // The pixels of an image already shown on the page, so rich text keeps the picture, not its URL.
 function embeddedImageSrc(src: string, budget: PixelBudget): string | null {
-  const image = Array.from(document.images).find(
+  const loaded = Array.from(document.images).filter(
     (candidate) => candidate.getAttribute("src") === src && candidate.naturalWidth > 0,
   );
+  // On another origin only a CORS load is readable, not e.g. the lightbox's copy of the same URL.
+  const image = loaded.find((candidate) => candidate.crossOrigin !== null) ?? loaded[0];
   const pixels = image ? image.naturalWidth * image.naturalHeight : Infinity;
   if (!image || pixels > budget.pixels) return null;
   const canvas = document.createElement("canvas");
