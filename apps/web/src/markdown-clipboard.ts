@@ -471,7 +471,6 @@ export function chatMarkdownClipboardPayload(
     const media = ancestorElement?.closest("[data-markdown-copy]");
     if (media?.querySelector("[src]")) {
       const text = media.getAttribute("data-markdown-copy")?.trim() ?? "";
-      if (!text) continue;
       texts.push(text);
       container.replaceChildren(text);
       htmls.push(sanitizedHtmlFrom(container));

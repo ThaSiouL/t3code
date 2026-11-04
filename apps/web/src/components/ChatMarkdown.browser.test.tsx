@@ -205,14 +205,19 @@ it("copies host media and asset links as authored references, never signed URLs"
   expect(html).toContain(`src="${externalUrl}"`);
   expect(html).toContain("report.pdf");
   expect(html).toContain('href="https://example.com/api/assets/manual.pdf"');
+});
 
+it("copies a selection inside a media player as its authored reference", async () => {
+  setup();
+  await using screen = await render(<ChatMarkdown cwd={undefined} text="See the clip" />);
+  await expect.element(screen.getByText("See the clip")).toBeInTheDocument();
   // A range inside a player's wrapper clones the video without its authored reference.
   const player = document.createElement("span");
   player.dataset.markdownCopy = "![Clip](/work/clip.mp4)";
   const video = document.createElement("video");
   video.src = `${location.origin}/api/assets/SIGNED.sig/clip.mp4`;
   player.append(video);
-  screen.getByAltText("Shot").element().after(player);
+  screen.getByText("See the clip").element().append(player);
   const range = document.createRange();
   range.selectNodeContents(player);
   window.getSelection()?.removeAllRanges();
