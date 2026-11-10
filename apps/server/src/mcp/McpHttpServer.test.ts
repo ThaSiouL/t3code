@@ -489,6 +489,11 @@ it.effect("checks each preview_act action against that action's own input", () =
 
       yield* callTool("preview_act", { action: "type", selector: "#name", text: "Ada" });
       expect(inputs.at(-2)).toEqual({ selector: "#name", text: "Ada" });
+
+      yield* callTool("preview_act", { action: "press", key: "Tab", count: 3 });
+      expect(inputs).toContainEqual({ key: "Tab", count: 3 });
+      const tooMany = yield* callTool("preview_act", { action: "press", key: "Tab", count: 101 });
+      expect(tooMany.isError).toBe(true);
     }),
   ).pipe(Effect.provide(layerTest)),
 );

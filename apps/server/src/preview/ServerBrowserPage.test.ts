@@ -238,6 +238,15 @@ describe("server browser element refs", () => {
     expect((await takeSnapshot()).url).toBe("data:text/html,…");
   });
 
+  it("presses a key count times", async () => {
+    await page.setContent(
+      "<button>b0</button><button>b1</button><button>b2</button><button>b3</button>",
+    );
+    await page.focus("button");
+    await ServerBrowserPage.press(page, { key: "Tab", count: 3 });
+    expect(await page.evaluate("document.activeElement?.textContent")).toBe("b3");
+  });
+
   it("rejects refs from another tab", async () => {
     await page.setContent("<button>same label</button>");
     const locator = buttonLocator((await takeSnapshot()).accessibilityTree, "same label");

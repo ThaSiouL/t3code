@@ -392,6 +392,11 @@ export const PreviewAutomationPressInput = Schema.Struct({
   ...PreviewAutomationTabTargetFields,
   key: Schema.String.check(Schema.isTrimmed()).check(Schema.isNonEmpty()),
   modifiers: Schema.optional(Schema.Array(Schema.Literals(["Alt", "Control", "Meta", "Shift"]))),
+  count: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })).annotate({
+      description: "Times to press the key. Default 1.",
+    }),
+  ),
 });
 export type PreviewAutomationPressInput = typeof PreviewAutomationPressInput.Type;
 
@@ -451,6 +456,7 @@ export const PreviewAutomationActInput = Schema.Struct({
   paths: Schema.optional(Schema.Array(Schema.String)),
   key: Schema.optional(Schema.String),
   modifiers: PreviewAutomationPressInput.fields.modifiers,
+  count: Schema.optional(Schema.Int),
   deltaX: Schema.optional(Schema.Finite),
   deltaY: Schema.optional(Schema.Finite),
   timeoutMs: Schema.optional(Schema.Int),

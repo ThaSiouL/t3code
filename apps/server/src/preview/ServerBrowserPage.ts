@@ -846,7 +846,8 @@ export const setInputFiles = async (page: Page, input: PreviewAutomationUploadIn
 };
 
 export const press = async (page: Page, input: PreviewAutomationPressInput) => {
-  await page.keyboard.press([...(input.modifiers ?? []), input.key].join("+"));
+  const key = [...(input.modifiers ?? []), input.key].join("+");
+  for (let i = 0; i < (input.count ?? 1); i++) await page.keyboard.press(key);
 };
 
 export const scroll = async (page: Page, input: PreviewAutomationScrollInput) => {
