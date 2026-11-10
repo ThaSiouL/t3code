@@ -227,6 +227,9 @@ describe("evaluatePullRequestWatch", () => {
 
   // regression: #16208 PR watches burned GitHub's rate limit and gave up
   it("holds check news while the thread's turn runs, so a push in that turn drops it", () => {
+    const red = detail({ checks: [check("lint", "failure")] });
+    const failing = evaluate(watch(), red, noRemarks, 0, true);
+    assert.deepEqual([failing.changes, failing.held, failing.next.failedChecks], [[], true, []]);
     const green = detail({ checks: [check("lint", "success")] });
     const running = evaluate(watch(), green, noRemarks, 0, true);
     assert.deepEqual([running.changes, running.held, running.next.passed], [[], true, false]);

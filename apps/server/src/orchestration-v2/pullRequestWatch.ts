@@ -72,8 +72,6 @@ export function evaluatePullRequestWatch(
   if (detail.checks.length > 0) {
     const failed = detail.checks.filter(isFailedCheck);
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
-    if (newlyFailed.length > 0) changes.push({ kind: "checks-failed", failed: newlyFailed });
-    failedChecks = failed.map((check) => check.name);
 
     const required = detail.checks.filter((check) => check.required === true);
     const gate = required.length > 0 ? required : detail.checks;
@@ -105,8 +103,10 @@ export function evaluatePullRequestWatch(
           : undefined;
     // A wake queued behind a running turn lands after any push in it, so the news waits for the
     // turn to end and is read again for the head at that point.
-    held = busy && news !== undefined;
+    held = busy && (newlyFailed.length > 0 || news !== undefined);
     if (!held) {
+      if (newlyFailed.length > 0) changes.push({ kind: "checks-failed", failed: newlyFailed });
+      failedChecks = failed.map((check) => check.name);
       if (news !== undefined) changes.push(news);
       owedChecks =
         news === undefined
