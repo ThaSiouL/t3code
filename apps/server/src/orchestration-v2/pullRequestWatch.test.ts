@@ -11,10 +11,11 @@ import {
   pullRequestWatchMessage,
 } from "./pullRequestWatch.ts";
 
-// These cases read the head once or at one moment, so the no-checks notice never comes due.
+// These cases read the head once or at one moment, so the no-checks notice never comes due,
+// and their thread is idle.
 const evaluatePullRequestWatch = (
-  ...args: Parameters<typeof evaluate> extends [...infer Head, number] ? Head : never
-) => evaluate(...args, 0);
+  ...args: Parameters<typeof evaluate> extends [...infer Head, number, boolean] ? Head : never
+) => evaluate(...args, 0, false);
 
 const STARTED = "2026-10-02T12:00:00.000Z";
 
@@ -225,6 +226,17 @@ describe("evaluatePullRequestWatch", () => {
   });
 
   // regression: #16208 PR watches burned GitHub's rate limit and gave up
+  it("holds check news while the thread's turn runs, so a push in that turn drops it", () => {
+    const green = detail({ checks: [check("lint", "success")] });
+    const running = evaluate(watch(), green, noRemarks, 0, true);
+    assert.deepEqual([running.changes, running.held, running.next.passed], [[], true, false]);
+    const pushed = detail({ headSha: "bbbbbbbbbb", checks: [check("lint", "pending")] });
+    assert.deepEqual(evaluatePullRequestWatch(running.next, pushed, noRemarks).changes, []);
+    assert.deepEqual(evaluatePullRequestWatch(running.next, green, noRemarks).changes, [
+      { kind: "checks-passed", count: 1, required: false },
+    ]);
+  });
+
   it("does not report passed again for a new passed check where none is required", () => {
     const first = evaluatePullRequestWatch(
       watch(),
@@ -480,7 +492,7 @@ describe("evaluatePullRequestWatch", () => {
     const kinds: Array<ReadonlyArray<string>> = [];
     let current = first;
     for (let minute = 0; minute <= 60; minute += 10) {
-      const { changes, next } = evaluate(current, read, noRemarks, minute * 60_000);
+      const { changes, next } = evaluate(current, read, noRemarks, minute * 60_000, false);
       kinds.push(changes.map((change) => change.kind));
       current = next;
     }

@@ -26,6 +26,8 @@ export interface PullRequestWatchReport {
   readonly changes: ReadonlyArray<PullRequestWatchChange>;
   readonly next: ThreadPullRequestWatch;
   readonly exhausted: boolean;
+  /** Check news held back while the thread's turn runs; the next sweep must read again. */
+  readonly held: boolean;
 }
 
 // Review bots edit one summary comment as they work. These markers carry its review state and reviewed commit.
@@ -54,6 +56,7 @@ export function evaluatePullRequestWatch(
   >,
   remarks: ReadonlyArray<PullRequestComment> | null,
   now: number,
+  busy: boolean,
 ): PullRequestWatchReport {
   const changes: Array<PullRequestWatchChange> = [];
   // Azure DevOps omits the head when its iteration read fails; that is not a push.
@@ -65,6 +68,7 @@ export function evaluatePullRequestWatch(
   let passed = headMoved ? false : watch.passed;
   let passedChecks = headMoved ? [] : watch.passedChecks;
   let owedChecks = headMoved ? [] : (watch.owedChecks ?? []);
+  let held = false;
   if (detail.checks.length > 0) {
     const failed = detail.checks.filter(isFailedCheck);
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
@@ -91,25 +95,30 @@ export function evaluatePullRequestWatch(
         : [];
     const settled =
       failed.length === 0 && detail.checks.every((check) => check.status !== "pending");
-    owedChecks = owed;
-    if (passedNow && (!passed || gateGrew)) {
-      changes.push(
-        required.length === 0 && failed.length > 0
+    const news: PullRequestWatchChange | undefined =
+      passedNow && (!passed || gateGrew)
+        ? required.length === 0 && failed.length > 0
           ? { kind: "checks-finished", count: gate.length, failed: failed.length }
-          : { kind: "checks-passed", count: gate.length, required: required.length > 0 },
-      );
+          : { kind: "checks-passed", count: gate.length, required: required.length > 0 }
+        : settled && owed.length > 0
+          ? { kind: "checks-passed", count: detail.checks.length, required: false }
+          : undefined;
+    // A wake queued behind a running turn lands after any push in it, so the news waits for the
+    // turn to end and is read again for the head at that point.
+    held = busy && news !== undefined;
+    if (!held) {
+      if (news !== undefined) changes.push(news);
       owedChecks =
-        required.length > 0
-          ? detail.checks
-              .filter((check) => check.required !== true && check.status === "pending")
-              .map((check) => check.name)
-          : [];
-    } else if (settled && owed.length > 0) {
-      changes.push({ kind: "checks-passed", count: detail.checks.length, required: false });
-      owedChecks = [];
+        news === undefined
+          ? owed
+          : news.kind === "checks-passed" && news.required
+            ? detail.checks
+                .filter((check) => check.required !== true && check.status === "pending")
+                .map((check) => check.name)
+            : [];
+      passed = passedNow;
+      passedChecks = passedNow ? gateNames : [];
     }
-    passed = passedNow;
-    passedChecks = passedNow ? gateNames : [];
   }
 
   // Only a head never read with checks waits for them: an empty read after checks were seen is
@@ -184,6 +193,7 @@ export function evaluatePullRequestWatch(
         : { botStatuses }),
     },
     exhausted: commentsOnly && wakes >= PULL_REQUEST_WATCH_WAKE_LIMIT,
+    held,
   };
 }
 

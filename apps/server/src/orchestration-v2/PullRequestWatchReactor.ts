@@ -541,6 +541,12 @@ export const make = Effect.gen(function* () {
           fingerprint === null ? QUIET_REREAD_MS : FINGERPRINT_REREAD_MS,
         )
       : null;
+    const reports = new Map(
+      group.targets.map((target) => [
+        target,
+        evaluatePullRequestWatch(target.watch, detail, remarks, now, target.thread.busy),
+      ]),
+    );
     lastReads.set(group.key, {
       at:
         plan.activity || last === undefined
@@ -549,14 +555,15 @@ export const make = Effect.gen(function* () {
       fingerprint: group.fingerprint,
       inFlight:
         detail.mergeability === "unknown" ||
-        detail.checks.some((check) => check.status === "pending"),
+        detail.checks.some((check) => check.status === "pending") ||
+        [...reports.values()].some((report) => report.held),
       remarksComplete: plan.activity ? remarks !== null : (last?.remarksComplete ?? false),
       watches: new Set(group.targets.map(watchKey)),
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
     });
     yield* eachTarget(group, (target) => {
-      const report = evaluatePullRequestWatch(target.watch, detail, remarks, now);
+      const report = reports.get(target)!;
       if (report.changes.length > 0) {
         const wake = pullRequestWatchMessage({
           number: target.link.number,

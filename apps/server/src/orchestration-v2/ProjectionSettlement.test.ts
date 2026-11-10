@@ -372,13 +372,19 @@ it.effect("sql: lists only active threads with pull request links, oldest first"
     const open = yield* createThread("open-link", {
       pullRequests: [pullRequestLink(3), pullRequestLink(4)],
     });
+    yield* createRun(open, "running");
 
     const threads = yield* store.getThreadsWithPullRequests();
     assert.deepEqual(
-      threads.map((thread) => [thread.id, thread.settledOverride, thread.pullRequests?.length]),
+      threads.map((thread) => [
+        thread.id,
+        thread.settledOverride,
+        thread.pullRequests?.length,
+        thread.busy,
+      ]),
       [
-        [settled, "settled", 1],
-        [open, null, 2],
+        [settled, "settled", 1, false],
+        [open, null, 2, true],
       ],
     );
     assert.deepEqual(
