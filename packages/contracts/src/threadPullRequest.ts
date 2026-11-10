@@ -100,6 +100,8 @@ export const ThreadPullRequestWatch = Schema.Struct({
    * none did. Null once either happened; absent on watches saved before it existed.
    */
   checksAwaitedSince: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** Review state last read from each bot comment, by comment ID; an edit that keeps it does not wake. */
+  botStatuses: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type ThreadPullRequestWatch = typeof ThreadPullRequestWatch.Type;
 

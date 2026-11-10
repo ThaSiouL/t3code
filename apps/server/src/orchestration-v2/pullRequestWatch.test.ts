@@ -306,6 +306,62 @@ describe("evaluatePullRequestWatch", () => {
     assert.deepEqual(evaluatePullRequestWatch(watching, detail(), [own]).changes, []);
   });
 
+  it("wakes for a bot's edit of its own comment only when its status or reviewed commit changes", () => {
+    // Marker lines from consecutive versions of real Codex and CodeRabbit summary comments.
+    const codexState = (sha: string, status: string, findings: string) =>
+      `<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {"code_review":{"commit_sha":"${sha}","has_any_findings":${findings},"has_unresolved_findings":${findings},"status":"${status}"},"security_review":{"commit_sha":null,"has_any_findings":null,"has_unresolved_findings":null,"status":null}} -->\n\n## Codex Review Summary\n\n| 📝 **Code Review** | ${status} <relative-time datetime="${status}">now</relative-time> | \`${sha.slice(0, 7)}\` | Manual request |`;
+    const rabbit = (markers: ReadonlyArray<string>, sha: string | null, walkthrough: string) =>
+      [
+        "<!-- coderabbit-ai-generated:v1 -->",
+        ...markers.map(
+          (marker) => `<!-- This is an auto-generated comment: ${marker} by coderabbit.ai -->`,
+        ),
+        sha === null ? "" : `<!-- change_assessment_commit:"${sha}" -->`,
+        walkthrough,
+      ].join("\n");
+    const bot = (login: string, body: string): PullRequestComment => ({
+      ...remark(login, "2026-10-02T11:00:00Z", body),
+      kind: "issue-comment",
+      author: { login, name: null, avatarUrl: null, isBot: true },
+    });
+    const at = (comment: PullRequestComment, minute: number, body: string) => ({
+      ...comment,
+      body,
+      editedAt: `2026-10-02T12:${String(minute).padStart(2, "0")}:00Z`,
+    });
+    const codex = bot("chatgpt-codex-connector", codexState("d96f5c8", "running", "null"));
+    const coderabbit = bot("coderabbitai", rabbit(["summarize"], "997e7d3", "First walkthrough."));
+    const human = remark("reviewer", "2026-10-02T11:00:00Z");
+    const seen = evaluatePullRequestWatch(watch(), detail(), [codex, coderabbit, human]);
+    assert.deepEqual(seen.changes, []);
+
+    const sweep = (comments: ReadonlyArray<PullRequestComment>) =>
+      evaluatePullRequestWatch(seen.next, detail(), comments).changes;
+    const woken = (comment: PullRequestComment) => [
+      { kind: "remarks" as const, remarks: [comment] },
+    ];
+    const rabbitWording = at(coderabbit, 1, rabbit(["summarize"], "997e7d3", "Reworded."));
+    assert.deepEqual(sweep([at(codex, 1, codex.body.replace("Manual", "PR")), rabbitWording]), []);
+    const finished = at(codex, 2, codexState("d96f5c8", "completed", "false"));
+    assert.deepEqual(sweep([finished]), woken(finished));
+    const told = evaluatePullRequestWatch(seen.next, detail(), [finished]).next;
+    const retimed = at(codex, 9, finished.body.replace(">now<", ">later<"));
+    assert.deepEqual(evaluatePullRequestWatch(told, detail(), [retimed]).changes, []);
+    const pushed = at(codex, 3, codexState("e1b2d3e", "running", "null"));
+    assert.deepEqual(sweep([pushed]), woken(pushed));
+    const reviewing = at(coderabbit, 4, rabbit(["review in progress", "summarize"], "997e7d3", ""));
+    assert.deepEqual(sweep([reviewing]), woken(reviewing));
+    const reviewed = at(coderabbit, 5, rabbit(["summarize"], "d96f5c8", "First walkthrough."));
+    assert.deepEqual(sweep([reviewed]), woken(reviewed));
+    const rewritten = at(codex, 6, "Codex rewrote this comment without its review state.");
+    assert.deepEqual(sweep([rewritten]), woken(rewritten));
+    const humanEdit = at(human, 7, human.body);
+    assert.deepEqual(sweep([humanEdit]), woken(humanEdit));
+    const reply = bot("coderabbitai", rabbit(["summarize"], "997e7d3", "First walkthrough."));
+    const newComment = { ...reply, id: "new", createdAt: "2026-10-02T12:08:00Z" };
+    assert.deepEqual(sweep([newComment]), woken(newComment));
+  });
+
   it("does not treat a failed check read as a rerun", () => {
     const failed = detail({ checks: [check("lint", "failure")] });
     const reported = evaluatePullRequestWatch(watch(), failed, noRemarks);

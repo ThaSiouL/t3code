@@ -27,6 +27,20 @@ export interface PullRequestWatchReport {
   readonly exhausted: boolean;
 }
 
+// Review bots edit one summary comment as they work. These markers carry its review state and reviewed commit.
+const BOT_STATUS_MARKERS = [
+  /<!-- codex-review-state:v1 (.*?) -->/g,
+  /<!-- This is an auto-generated comment: (.*?) by coderabbit\.ai -->/g,
+  /<!-- change_assessment_commit:"(\w+)" -->/g,
+];
+
+const botStatus = (remark: PullRequestComment) =>
+  remark.author?.isBot === true
+    ? BOT_STATUS_MARKERS.flatMap((marker) =>
+        [...remark.body.matchAll(marker)].map((match) => match[1]),
+      ).join("\n") || undefined
+    : undefined;
+
 // action-required is a finished check needing human input.
 const isFailedCheck = (check: PullRequestCheck) =>
   check.status === "failure" || check.status === "cancelled" || check.status === "action-required";
@@ -110,12 +124,16 @@ export function evaluatePullRequestWatch(
   const own = (detail.viewer ?? detail.author?.login)?.toLowerCase();
   const through = Date.parse(watch.remarksThrough);
   const activeAt = (remark: PullRequestComment) => remark.editedAt ?? remark.createdAt;
+  const botStatuses: Record<string, string> = {};
   // Hosts can stamp remarks to the second, so remarks at the boundary time are told apart by ID.
   const fresh = (remarks ?? []).filter((remark) => {
     const at = Date.parse(activeAt(remark));
+    const status = botStatus(remark);
+    if (status !== undefined) botStatuses[remark.id] = status;
     return (
       (at > through || (at === through && !watch.remarkIds.includes(remark.id))) &&
-      remark.author?.login.toLowerCase() !== own
+      remark.author?.login.toLowerCase() !== own &&
+      (status === undefined || watch.botStatuses?.[remark.id] !== status)
     );
   });
   if (fresh.length > 0) changes.push({ kind: "remarks", remarks: fresh });
@@ -153,6 +171,9 @@ export function evaluatePullRequestWatch(
       conflicting,
       wakes,
       checksAwaitedSince,
+      ...(remarks === null
+        ? watch.botStatuses && { botStatuses: watch.botStatuses }
+        : { botStatuses }),
     },
     exhausted: commentsOnly && wakes >= PULL_REQUEST_WATCH_WAKE_LIMIT,
   };
