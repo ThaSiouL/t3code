@@ -362,11 +362,19 @@ describe("evaluatePullRequestWatch", () => {
     assert.deepEqual(sweep([newComment]), woken(newComment));
   });
 
-  it("does not treat a failed check read as a rerun", () => {
-    const failed = detail({ checks: [check("lint", "failure")] });
-    const reported = evaluatePullRequestWatch(watch(), failed, noRemarks);
-    assert.equal(reported.changes.length, 1);
-    const unreadable = evaluatePullRequestWatch(reported.next, detail({ checks: [] }), noRemarks);
+  it("wakes once all checks settle when none is required, and not again for a failed read", () => {
+    const reported = evaluatePullRequestWatch(
+      watch(),
+      detail({ checks: [check("lint", "failure"), check("test", "pending")] }),
+      noRemarks,
+    );
+    assert.deepEqual(reported.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")] },
+    ]);
+    const failed = detail({ checks: [check("lint", "failure"), check("test", "success")] });
+    const settled = evaluatePullRequestWatch(reported.next, failed, noRemarks);
+    assert.deepEqual(settled.changes, [{ kind: "checks-finished", count: 2, failed: 1 }]);
+    const unreadable = evaluatePullRequestWatch(settled.next, detail({ checks: [] }), noRemarks);
     assert.deepEqual(evaluatePullRequestWatch(unreadable.next, failed, noRemarks).changes, []);
   });
 
